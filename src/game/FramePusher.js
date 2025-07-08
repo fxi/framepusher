@@ -1,6 +1,7 @@
 import { Physics } from './Physics.js';
 import { Renderer } from './Renderer.js';
 import { EventHandler } from './EventHandler.js';
+import { TweakpaneConfig } from './TweakpaneConfig.js';
 
 /**
  * Main FramePusher game class
@@ -31,6 +32,7 @@ export class FramePusher {
     this.physics = new Physics(this.config);
     this.renderer = new Renderer(this.canvas, this.config);
     this.eventHandler = null; // Will be initialized after frames are created
+    this.tweakpane = null; // Will be initialized after game setup
 
     this._setupCanvas();
     this._createFrames();
@@ -42,6 +44,10 @@ export class FramePusher {
    */
   init() {
     this.renderer.generateBackground();
+    
+    // Initialize Tweakpane controls
+    this.tweakpane = new TweakpaneConfig(this);
+    
     this.start();
   }
 
@@ -77,6 +83,10 @@ export class FramePusher {
     
     if (this.eventHandler) {
       this.eventHandler.destroy();
+    }
+    
+    if (this.tweakpane) {
+      this.tweakpane.destroy();
     }
   }
 

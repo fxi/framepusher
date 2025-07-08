@@ -18,5 +18,8 @@
     "interactive"
   ],
   "author": "fxi",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "tweakpane": "^4.0.5"
+  }
 }
