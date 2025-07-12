@@ -1,4 +1,4 @@
-import { Pane } from 'tweakpane';
+import { Pane } from "tweakpane";
 
 /**
  * Performance-focused Tweakpane configuration for FramePusher
@@ -8,7 +8,7 @@ export class TweakpaneConfig {
   constructor(game) {
     this.game = game;
     this.pane = new Pane({
-      title: 'FramePusher Controls',
+      title: "FramePusher Controls",
       expanded: true,
     });
 
@@ -34,59 +34,77 @@ export class TweakpaneConfig {
    */
   _setupControls() {
     // Number of frames
-    this.pane.addBinding(this.params, 'numFrames', {
-      label: 'Frames',
-      min: 5,
-      max: 50,
-      step: 1,
-    }).on('change', (ev) => this._debouncedUpdate('NUM_FRAMES', ev.value, true));
+    this.pane
+      .addBinding(this.params, "numFrames", {
+        label: "Frames",
+        min: 5,
+        max: 50,
+        step: 1,
+      })
+      .on("change", (ev) =>
+        this._debouncedUpdate("NUM_FRAMES", ev.value, true)
+      );
 
     // Frame thickness
-    this.pane.addBinding(this.params, 'frameThickness', {
-      label: 'Thickness',
-      min: 5,
-      max: 50,
-      step: 1,
-    }).on('change', (ev) => this._debouncedUpdate('FRAME_THICKNESS', ev.value, true));
+    this.pane
+      .addBinding(this.params, "frameThickness", {
+        label: "Thickness",
+        min: 5,
+        max: 50,
+        step: 1,
+      })
+      .on("change", (ev) =>
+        this._debouncedUpdate("FRAME_THICKNESS", ev.value, true)
+      );
 
     // Gap between frames
-    this.pane.addBinding(this.params, 'gap', {
-      label: 'Gap',
-      min: 0,
-      max: 30,
-      step: 1,
-    }).on('change', (ev) => this._debouncedUpdate('GAP', ev.value, true));
+    this.pane
+      .addBinding(this.params, "gap", {
+        label: "Gap",
+        min: 0,
+        max: 30,
+        step: 1,
+      })
+      .on("change", (ev) => this._debouncedUpdate("GAP", ev.value, true));
 
     // Physics separator
     this.pane.addBlade({
-      view: 'separator',
+      view: "separator",
     });
 
     // Damping
-    this.pane.addBinding(this.params, 'damping', {
-      label: 'Damping',
-      min: 0.1,
-      max: 1.0,
-      step: 0.01,
-    }).on('change', (ev) => this._debouncedUpdate('DAMPING', ev.value, false));
+    this.pane
+      .addBinding(this.params, "damping", {
+        label: "Damping",
+        min: 0.1,
+        max: 1.0,
+        step: 0.01,
+      })
+      .on("change", (ev) => this._debouncedUpdate("DAMPING", ev.value, false));
 
     // Spring strength
-    this.pane.addBinding(this.params, 'springStrength', {
-      label: 'Spring',
-      min: 0.01,
-      max: 1.0,
-      step: 0.01,
-    }).on('change', (ev) => this._debouncedUpdate('SPRING_STRENGTH', ev.value, false));
+    this.pane
+      .addBinding(this.params, "springStrength", {
+        label: "Spring",
+        min: 0.01,
+        max: 1.0,
+        step: 0.01,
+      })
+      .on("change", (ev) =>
+        this._debouncedUpdate("SPRING_STRENGTH", ev.value, false)
+      );
 
     // Reset button
     this.pane.addBlade({
-      view: 'separator',
+      view: "separator",
     });
-    
-    this.pane.addBlade({
-      view: 'button',
-      title: 'Reset',
-    }).on('click', () => this._resetToDefaults());
+
+    this.pane
+      .addBlade({
+        view: "button",
+        title: "Reset",
+      })
+      .on("click", () => this._resetToDefaults());
   }
 
   /**
@@ -153,7 +171,7 @@ export class TweakpaneConfig {
 
     // Recreate frames with new settings
     this.game._createFrames();
-    this.game._initializeEventHandler();
+    //this.game._initializeEventHandler();
 
     // Refresh pane to show updated values
     this.pane.refresh();
@@ -166,7 +184,7 @@ export class TweakpaneConfig {
     if (this.updateTimeout) {
       clearTimeout(this.updateTimeout);
     }
-    
+
     if (this.pane) {
       this.pane.dispose();
     }

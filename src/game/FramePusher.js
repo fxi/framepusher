@@ -230,6 +230,9 @@ export class FramePusher {
     this.config = { ...this.config, ...newConfig };
     this.physics = new Physics(this.config);
     this.renderer = new Renderer(this.canvas, this.config);
+    
+    // Regenerate background dots when renderer is recreated
+    this.renderer.generateBackground();
   }
 
   /**

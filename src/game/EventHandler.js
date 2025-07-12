@@ -109,8 +109,21 @@ export class EventHandler {
 
     const mousePos = this._getMousePosition(event);
     
-    this.dragInfo.target.x = mousePos.x - this.dragInfo.offsetX;
-    this.dragInfo.target.y = mousePos.y - this.dragInfo.offsetY;
+    // Calculate new position
+    let newX = mousePos.x - this.dragInfo.offsetX;
+    let newY = mousePos.y - this.dragInfo.offsetY;
+    
+    // Apply canvas boundary constraints
+    const canvasRect = this.canvas.getBoundingClientRect();
+    const maxX = this.canvas.width - this.dragInfo.target.width;
+    const maxY = this.canvas.height - this.dragInfo.target.height;
+    
+    // Clamp position to canvas boundaries
+    newX = Math.max(0, Math.min(newX, maxX));
+    newY = Math.max(0, Math.min(newY, maxY));
+    
+    this.dragInfo.target.x = newX;
+    this.dragInfo.target.y = newY;
 
     if (this.onDragMove) {
       this.onDragMove(mousePos);
