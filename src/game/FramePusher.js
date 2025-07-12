@@ -45,8 +45,10 @@ export class FramePusher {
   init() {
     this.renderer.generateBackground();
     
-    // Initialize Tweakpane controls
-    this.tweakpane = new TweakpaneConfig(this);
+    // Initialize Tweakpane controls only in development mode
+    if (this._isDevelopmentMode()) {
+      this.tweakpane = new TweakpaneConfig(this);
+    }
     
     this.start();
   }
@@ -249,4 +251,27 @@ export class FramePusher {
       this.eventHandler.setDragTarget(dragTarget);
     }
   }
+
+  /**
+   * Checks if the app is running in development mode
+   * @returns {boolean} True if in development mode
+   * @private
+   */
+  _isDevelopmentMode() {
+    // Check for localhost or common development ports
+    const hostname = window.location.hostname;
+    const port = window.location.port;
+    
+    return (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '0.0.0.0' ||
+      port === '3000' ||
+      port === '3001' ||
+      port === '5173' ||
+      port === '8080' ||
+      hostname.includes('.local')
+    );
+  }
+
 }

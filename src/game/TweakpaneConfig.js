@@ -21,8 +21,6 @@ export class TweakpaneConfig {
       numFrames: game.config.NUM_FRAMES,
       frameThickness: game.config.FRAME_THICKNESS,
       gap: game.config.GAP,
-      damping: game.config.DAMPING,
-      springStrength: game.config.SPRING_STRENGTH,
     };
 
     this._setupControls();
@@ -67,32 +65,7 @@ export class TweakpaneConfig {
       })
       .on("change", (ev) => this._debouncedUpdate("GAP", ev.value, true));
 
-    // Physics separator
-    this.pane.addBlade({
-      view: "separator",
-    });
-
-    // Damping
-    this.pane
-      .addBinding(this.params, "damping", {
-        label: "Damping",
-        min: 0.1,
-        max: 1.0,
-        step: 0.01,
-      })
-      .on("change", (ev) => this._debouncedUpdate("DAMPING", ev.value, false));
-
-    // Spring strength
-    this.pane
-      .addBinding(this.params, "springStrength", {
-        label: "Spring",
-        min: 0.01,
-        max: 1.0,
-        step: 0.01,
-      })
-      .on("change", (ev) =>
-        this._debouncedUpdate("SPRING_STRENGTH", ev.value, false)
-      );
+    
 
     // Reset button
     this.pane.addBlade({
@@ -165,8 +138,6 @@ export class TweakpaneConfig {
       NUM_FRAMES: defaults.numFrames,
       FRAME_THICKNESS: defaults.frameThickness,
       GAP: defaults.gap,
-      DAMPING: defaults.damping,
-      SPRING_STRENGTH: defaults.springStrength,
     });
 
     // Recreate frames with new settings
