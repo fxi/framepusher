@@ -103,9 +103,12 @@ this.config = {
   GAP: 10,               // Gap between frames
   DAMPING: 0.9,          // Physics damping factor
   SPRING_STRENGTH: 0.2,  // Spring force strength
-  NUM_FRAMES: 10,        // Number of nested frames
+  HANDLE_SIZE: 40,       // Size of the draggable square
 };
 ```
+
+The number of nested frames is calculated automatically based on the canvas
+size, the frame thickness, the gap and the handle size.
 
 ## 🚀 Deployment
 
