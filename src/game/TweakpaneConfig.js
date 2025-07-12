@@ -18,7 +18,6 @@ export class TweakpaneConfig {
 
     // Configuration parameters
     this.params = {
-      numFrames: game.config.NUM_FRAMES,
       frameThickness: game.config.FRAME_THICKNESS,
       gap: game.config.GAP,
     };
@@ -31,18 +30,6 @@ export class TweakpaneConfig {
    * @private
    */
   _setupControls() {
-    // Number of frames
-    this.pane
-      .addBinding(this.params, "numFrames", {
-        label: "Frames",
-        min: 5,
-        max: 50,
-        step: 1,
-      })
-      .on("change", (ev) =>
-        this._debouncedUpdate("NUM_FRAMES", ev.value, true)
-      );
-
     // Frame thickness
     this.pane
       .addBinding(this.params, "frameThickness", {
@@ -123,7 +110,6 @@ export class TweakpaneConfig {
    */
   _resetToDefaults() {
     const defaults = {
-      numFrames: 10,
       frameThickness: 20,
       gap: 10,
       damping: 0.9,
@@ -135,7 +121,6 @@ export class TweakpaneConfig {
 
     // Batch update configuration
     this.game.updateConfig({
-      NUM_FRAMES: defaults.numFrames,
       FRAME_THICKNESS: defaults.frameThickness,
       GAP: defaults.gap,
     });

@@ -18,9 +18,10 @@ export class FramePusher {
     this.config = {
       FRAME_THICKNESS: 20,
       GAP: 10,
+      HANDLE_SIZE: 40,
       DAMPING: 0.9,
       SPRING_STRENGTH: 0.2,
-      NUM_FRAMES: 10,
+      NUM_FRAMES: 0, // will be calculated
     };
 
     // Game state
@@ -107,6 +108,22 @@ export class FramePusher {
   }
 
   /**
+   * Calculates how many frames can fit in the current canvas
+   * based on thickness, gap and handle size
+   * @private
+   */
+  _calculateNumFrames() {
+    const stepDown = (this.config.GAP + this.config.FRAME_THICKNESS) * 2;
+    if (stepDown <= 0) {
+      return 1;
+    }
+
+    const available = this.canvas.width - this.config.HANDLE_SIZE;
+    const count = Math.floor(available / stepDown);
+    return Math.max(1, count + 1); // include the handle frame
+  }
+
+  /**
    * Creates the nested frame structure
    * @private
    */
@@ -114,9 +131,13 @@ export class FramePusher {
     this.frames = [];
     const stepDown = (this.config.GAP + this.config.FRAME_THICKNESS) * 2;
 
+    this.config.NUM_FRAMES = this._calculateNumFrames();
+
     for (let i = 0; i < this.config.NUM_FRAMES; i++) {
       const isLastFrame = i === this.config.NUM_FRAMES - 1;
-      const size = isLastFrame ? 40 : this.canvas.width - i * stepDown;
+      const size = isLastFrame
+        ? this.config.HANDLE_SIZE
+        : this.canvas.width - i * stepDown;
       const position = (this.canvas.width - size) / 2;
 
       this.frames.push({
