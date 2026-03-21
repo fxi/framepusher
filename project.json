@@ -1,0 +1,9 @@
+{
+  "name": "framepusher",
+  "description": "Interactive frame-pushing animation game",
+  "tags": ["canvas", "animation", "game"],
+  "year_init": 2025,
+  "year_last": 2025,
+  "url": "https://fxi.io/framepusher/",
+  "featured": false
+}
