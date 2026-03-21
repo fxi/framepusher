@@ -1,13 +1,14 @@
-import { Physics } from './Physics.js';
-import { Renderer } from './Renderer.js';
+import { Physics }      from './Physics.js';
+import { Renderer }     from './Renderer.js';
 import { EventHandler } from './EventHandler.js';
+import { AudioManager } from './AudioManager.js';
 
-const DOT_SPACING = 20;
-const FRAME_THICKNESS = DOT_SPACING;          // 20px — one dot-spacing wide
-const GAP = DOT_SPACING;                      // 20px — one dot-spacing gap
-const STEP = (FRAME_THICKNESS + GAP) * 2;    // 80px step between frame sizes
-const GREEN_SIZE = DOT_SPACING * 2;           // 40px green block
-const INNERMOST_FRAME_SIZE = GREEN_SIZE + STEP; // 120px — ensures GAP to green
+const DOT_SPACING         = 20;
+const FRAME_THICKNESS     = DOT_SPACING;
+const GAP                 = DOT_SPACING;
+const STEP                = (FRAME_THICKNESS + GAP) * 2;  // 80
+const GREEN_SIZE          = DOT_SPACING * 2;              // 40
+const INNERMOST_FRAME_SIZE = GREEN_SIZE + STEP;           // 120
 
 export class FramePusher {
   constructor(canvasId) {
@@ -16,24 +17,25 @@ export class FramePusher {
 
     this.config = {
       FRAME_THICKNESS,
-      DAMPING: 0.9,
+      DAMPING:        0.9,
       SPRING_STRENGTH: 0.2,
     };
 
-    this.frames = [];
-    this.isRunning = false;
-    this.animationId = null;
+    this.frames       = [];
+    this.isRunning    = false;
+    this.animationId  = null;
 
     // Eye animation state
-    this._cursorPos    = null;  // { x, y } — current cursor position
-    this._cursorFrames = 0;     // countdown: eyes follow cursor for N frames after last move
-    this._bounceFrames = 0;     // countdown: eyes look surprised for N frames
+    this._cursorPos    = null;
+    this._cursorFrames = 0;
+    this._bounceFrames = 0;
 
-    // Reset state — frames only spring back when explicitly triggered
+    // Reset state
     this._isResetting = false;
 
-    this.physics = new Physics(this.config);
-    this.renderer = new Renderer(this.canvas, this.config);
+    this.physics      = new Physics(this.config);
+    this.renderer     = new Renderer(this.canvas, this.config);
+    this.audio        = new AudioManager();
     this.eventHandler = null;
 
     this._resizeCanvas(window.innerWidth, window.innerHeight);
@@ -70,17 +72,11 @@ export class FramePusher {
     this.canvas.height = height;
   }
 
-  /**
-   * Compute frames so FRAME_THICKNESS = GAP = DOT_SPACING (20px).
-   * canvasMax is chosen so the innermost regular frame = 120px, giving
-   * an exact 20px gap to the 40px green block.
-   * @private
-   */
   _createFrames() {
     this.frames = [];
 
-    const rawMax  = Math.max(this.canvas.width, this.canvas.height);
-    const nOuter  = Math.ceil((rawMax - INNERMOST_FRAME_SIZE) / STEP);
+    const rawMax    = Math.max(this.canvas.width, this.canvas.height);
+    const nOuter    = Math.ceil((rawMax - INNERMOST_FRAME_SIZE) / STEP);
     const canvasMax = INNERMOST_FRAME_SIZE + nOuter * STEP;
 
     const baseRestX = Math.round((this.canvas.width  - canvasMax) / 2);
@@ -88,13 +84,12 @@ export class FramePusher {
 
     for (let i = 0; i <= nOuter; i++) {
       const size  = canvasMax - i * STEP;
-      const restX = baseRestX + i * (STEP / 2); // STEP/2=40, always integer
+      const restX = baseRestX + i * (STEP / 2);
       const restY = baseRestY + i * (STEP / 2);
       this.frames.push({ x: restX, y: restY, vx: 0, vy: 0,
                          width: size, height: size, restX, restY });
     }
 
-    // Green block (centered)
     const gRestX = Math.round((this.canvas.width  - GREEN_SIZE) / 2);
     const gRestY = Math.round((this.canvas.height - GREEN_SIZE) / 2);
     this.frames.push({ x: gRestX, y: gRestY, vx: 0, vy: 0,
@@ -107,10 +102,20 @@ export class FramePusher {
   _initializeEventHandler() {
     this.eventHandler = new EventHandler(this.canvas, this.frames, FRAME_THICKNESS);
     this.eventHandler.setDragCallbacks(
-      () => this.physics.stopAllMovement(this.frames),
+      (dragIndex) => {
+        this.physics.stopAllMovement(this.frames);
+        this.audio.playGrab(dragIndex, this.frames.length);
+      },
       null,
       null
     );
+
+    // Unlock audio on first pointer interaction (required by browsers)
+    const unlock = () => {
+      this.audio.unlock();
+      this.canvas.removeEventListener('pointerdown', unlock);
+    };
+    this.canvas.addEventListener('pointerdown', unlock);
 
     // Cursor tracking — eyes follow pointer / touch
     this.canvas.addEventListener('mousemove', (e) => {
@@ -130,13 +135,13 @@ export class FramePusher {
     if (resetBtn) {
       resetBtn.addEventListener('click', () => {
         resetBtn.classList.remove('spinning');
-        // Force reflow so the animation restarts if clicked again mid-spin
         void resetBtn.offsetWidth;
         resetBtn.classList.add('spinning');
         resetBtn.addEventListener('animationend', () => {
           resetBtn.classList.remove('spinning');
         }, { once: true });
         this._isResetting = true;
+        this.audio.playReset();
       });
     }
   }
@@ -151,14 +156,21 @@ export class FramePusher {
   _updatePhysics() {
     if (this.eventHandler.isDragging()) {
       this.physics.updateDragPhysics(this.frames, this.eventHandler.getDraggedIndex());
+
+      // Play collision sound for the outermost frame that was actually pushed
+      const pushed = this.physics.pushedFrameIndices;
+      if (pushed.length > 0) {
+        const outermost = Math.min(...pushed);
+        const vel = Math.hypot(this.frames[outermost].vx, this.frames[outermost].vy);
+        this.audio.playCollision(outermost, this.frames.length, vel);
+      }
+
     } else if (this._isResetting) {
       this.physics.updateSettlingPhysics(this.frames);
 
-      // Velocity spike → surprise eyes during the bounce-back
       const maxV = Math.max(...this.frames.map(f => Math.hypot(f.vx, f.vy)));
       if (maxV > 3) this._bounceFrames = 50;
 
-      // Finished settling — snap to exact rest and stop
       const settled = this.frames.every(
         f => Math.hypot(f.vx, f.vy) < 0.1 &&
              Math.hypot(f.x - f.restX, f.y - f.restY) < 0.5
@@ -166,20 +178,19 @@ export class FramePusher {
       if (settled) {
         for (const f of this.frames) { f.x = f.restX; f.y = f.restY; f.vx = 0; f.vy = 0; }
         this._isResetting = false;
+        this.audio.playSettle();
       }
     }
-    // else: not dragging, not resetting — frames stay where they are
   }
 
   _render() {
-    // Tick eye timers
     if (this._cursorFrames > 0) this._cursorFrames--;
     else this._cursorPos = null;
     if (this._bounceFrames > 0) this._bounceFrames--;
 
     const green = this.frames[this.frames.length - 1];
-    const gcx = green.x + green.width  / 2;
-    const gcy = green.y + green.height / 2;
+    const gcx   = green.x + green.width  / 2;
+    const gcy   = green.y + green.height / 2;
 
     this.renderer.updateEyes(
       this._cursorFrames > 0 ? this._cursorPos : null,

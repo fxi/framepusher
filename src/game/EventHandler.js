@@ -211,7 +211,7 @@ export class EventHandler {
 
     this.canvas.style.cursor = 'grabbing';
 
-    if (this.onDragStart) this.onDragStart();
+    if (this.onDragStart) this.onDragStart(foundIndex);
   }
 
   _handleDragMove(position) {

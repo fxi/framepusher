@@ -1,98 +1,119 @@
 /**
- * Audio manager for the FramePusher game
- * Handles sound effects using HTML5 Audio
+ * AudioManager — fully synthesized sounds via Web Audio API.
+ * No audio files required. The context must be unlocked by a user gesture
+ * before any sound plays (call unlock() on first pointerdown).
  */
 export class AudioManager {
   constructor() {
-    this.isEnabled = true;
-    this.volume = 0.3;
-    this.tickSound = null;
-    
-    this._loadAudioAssets();
+    this._ctx      = null;
+    this._unlocked = false;
+    this._cooldowns = new Map(); // frameIndex → timestamp (ms)
   }
 
-  /**
-   * Loads audio assets
-   * @private
-   */
-  _loadAudioAssets() {
+  /** Create (or resume) the AudioContext. Must be called from a user gesture. */
+  unlock() {
+    if (this._unlocked) return;
     try {
-      this.tickSound = new Audio('src/audio/tick.mp3');
-      this.tickSound.volume = this.volume;
-      this.tickSound.preload = 'auto';
-      
-      // Handle loading errors
-      this.tickSound.addEventListener('error', () => {
-        console.warn('Failed to load tick sound');
-        this.isEnabled = false;
-      });
-    } catch (error) {
-      console.warn('Audio not supported:', error);
-      this.isEnabled = false;
+      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this._unlocked = true;
+    } catch {
+      // Audio not available — degrade silently
     }
   }
 
-  /**
-   * Plays a tick sound when frames collide
-   */
-  playTickSound() {
-    if (!this.isEnabled || !this.tickSound) {
-      return;
-    }
+  get _ready() {
+    return this._unlocked && this._ctx;
+  }
 
-    try {
-      // Reset the audio to the beginning and play
-      this.tickSound.currentTime = 0;
-      this.tickSound.volume = this.volume;
-      this.tickSound.play().catch(error => {
-        // Handle autoplay restrictions gracefully
-        console.warn('Audio play failed:', error);
-      });
-    } catch (error) {
-      console.warn('Error playing tick sound:', error);
-    }
+  // ─── Public sound events ───────────────────────────────────────────────────
+
+  /**
+   * Short woody knock when grabbing a frame.
+   * Pitch shifts slightly with depth: outer frames are lower.
+   */
+  playGrab(frameIndex, totalFrames) {
+    if (!this._ready) return;
+    const t   = this._ctx.currentTime;
+    const freq = 100 + (1 - frameIndex / totalFrames) * 80; // 100–180 Hz
+    this._tone('sine', freq, 0.3, t, 0.005, t + 0.09);
   }
 
   /**
-   * Sets the volume for sound effects
-   * @param {number} volume - Volume level (0.0 to 1.0)
+   * Pitched tick when a frame is pushed by a collision.
+   * Rate-limited to one sound per frame per 80 ms.
+   * Outer frames = low pitch, inner frames = high pitch.
+   * Volume scales with collision velocity.
    */
-  setVolume(volume) {
-    this.volume = Math.max(0, Math.min(1, volume));
+  playCollision(frameIndex, totalFrames, velocity) {
+    if (!this._ready) return;
+
+    const now = performance.now();
+    const last = this._cooldowns.get(frameIndex) ?? 0;
+    if (now - last < 80) return;
+    this._cooldowns.set(frameIndex, now);
+
+    const t    = this._ctx.currentTime;
+    const norm = 1 - frameIndex / Math.max(totalFrames - 1, 1); // 0=inner, 1=outer
+    const freq = 220 + norm * 560;                               // 220–780 Hz
+    const vol  = Math.min(0.3, 0.08 + velocity * 0.015);
+    this._tone('triangle', freq, vol, t, 0.002, t + 0.065);
   }
 
   /**
-   * Enables or disables sound effects
-   * @param {boolean} enabled - Whether sounds should be enabled
+   * Short ascending sweep when the reset button is pressed.
    */
-  setEnabled(enabled) {
-    this.isEnabled = enabled;
+  playReset() {
+    if (!this._ready) return;
+    const ctx = this._ctx;
+    const t   = ctx.currentTime;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0.18, t);
+    gain.gain.linearRampToValueAtTime(0, t + 0.45);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, t);
+    osc.frequency.exponentialRampToValueAtTime(520, t + 0.4);
+    osc.connect(gain);
+    osc.start(t);
+    osc.stop(t + 0.45);
   }
 
   /**
-   * Gets the current volume level
-   * @returns {number} Current volume (0.0 to 1.0)
+   * Quiet perfect-fifth chord when all frames have settled back to rest.
    */
-  getVolume() {
-    return this.volume;
+  playSettle() {
+    if (!this._ready) return;
+    const t = this._ctx.currentTime;
+    this._tone('sine', 330, 0.12, t, 0.01, t + 0.25);
+    this._tone('sine', 495, 0.08, t, 0.01, t + 0.25);
   }
 
-  /**
-   * Gets whether sound effects are enabled
-   * @returns {boolean} True if sounds are enabled
-   */
-  isAudioEnabled() {
-    return this.isEnabled && this.tickSound !== null;
-  }
+  // ─── Private helpers ───────────────────────────────────────────────────────
 
   /**
-   * Destroys the audio manager and cleans up resources
+   * Play a single oscillator tone with a simple attack/decay envelope.
+   * @param {string} type      OscillatorType
+   * @param {number} freq      Hz
+   * @param {number} peakGain  peak amplitude (0–1)
+   * @param {number} startTime AudioContext time
+   * @param {number} attackEnd time for peak
+   * @param {number} stopTime  time for silence (gain → 0)
    */
-  destroy() {
-    if (this.tickSound) {
-      this.tickSound.pause();
-      this.tickSound.src = '';
-      this.tickSound = null;
-    }
+  _tone(type, freq, peakGain, startTime, attackEnd, stopTime) {
+    const ctx  = this._ctx;
+    const gain = ctx.createGain();
+    gain.connect(ctx.destination);
+    gain.gain.setValueAtTime(0, startTime);
+    gain.gain.linearRampToValueAtTime(peakGain, attackEnd);
+    gain.gain.exponentialRampToValueAtTime(0.0001, stopTime);
+
+    const osc  = ctx.createOscillator();
+    osc.type   = type;
+    osc.frequency.setValueAtTime(freq, startTime);
+    osc.connect(gain);
+    osc.start(startTime);
+    osc.stop(stopTime + 0.01);
   }
 }
