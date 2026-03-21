@@ -87,13 +87,7 @@ class App {
     // Debounce resize events
     clearTimeout(this._resizeTimeout);
     this._resizeTimeout = setTimeout(() => {
-      const containerSize = Math.min(
-        window.innerHeight * 0.7,
-        window.innerWidth * 0.8,
-        600
-      );
-      
-      this.game.resize(containerSize, containerSize);
+      this.game.resize(window.innerWidth, window.innerHeight);
     }, 250);
   }
 

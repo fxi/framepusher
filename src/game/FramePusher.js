@@ -1,277 +1,139 @@
 import { Physics } from './Physics.js';
 import { Renderer } from './Renderer.js';
 import { EventHandler } from './EventHandler.js';
-import { TweakpaneConfig } from './TweakpaneConfig.js';
 
-/**
- * Main FramePusher game class
- * Orchestrates physics, rendering, and event handling
- */
+const DOT_SPACING = 20;
+const FRAME_THICKNESS = DOT_SPACING;          // 20px — one dot-spacing wide
+const GAP = DOT_SPACING;                      // 20px — one dot-spacing gap
+const STEP = (FRAME_THICKNESS + GAP) * 2;    // 80px step between frame sizes
+const GREEN_SIZE = DOT_SPACING * 2;           // 40px green block
+const INNERMOST_FRAME_SIZE = GREEN_SIZE + STEP; // 120px — ensures GAP to green
+
 export class FramePusher {
   constructor(canvasId) {
     this.canvas = document.getElementById(canvasId);
-    if (!this.canvas) {
-      throw new Error(`Canvas element with id "${canvasId}" not found`);
-    }
+    if (!this.canvas) throw new Error(`Canvas "${canvasId}" not found`);
 
-    // Game configuration
     this.config = {
-      FRAME_THICKNESS: 20,
-      GAP: 10,
+      FRAME_THICKNESS,
       DAMPING: 0.9,
       SPRING_STRENGTH: 0.2,
-      NUM_FRAMES: 10,
     };
 
-    // Game state
     this.frames = [];
     this.isRunning = false;
     this.animationId = null;
 
-    // Initialize game systems
     this.physics = new Physics(this.config);
     this.renderer = new Renderer(this.canvas, this.config);
-    this.eventHandler = null; // Will be initialized after frames are created
-    this.tweakpane = null; // Will be initialized after game setup
+    this.eventHandler = null;
 
-    this._setupCanvas();
+    this._resizeCanvas(window.innerWidth, window.innerHeight);
     this._createFrames();
     this._initializeEventHandler();
   }
 
-  /**
-   * Initializes the game and starts the animation loop
-   */
   init() {
-    this.renderer.generateBackground();
-    
-    // Initialize Tweakpane controls only in development mode
-    if (this._isDevelopmentMode()) {
-      this.tweakpane = new TweakpaneConfig(this);
-    }
-    
+    this.renderer.generateBackground(this.frames);
     this.start();
   }
 
-  /**
-   * Starts the game animation loop
-   */
   start() {
-    if (this.isRunning) {
-      return;
-    }
-
+    if (this.isRunning) return;
     this.isRunning = true;
     this._animate();
   }
 
-  /**
-   * Stops the game animation loop
-   */
   stop() {
     this.isRunning = false;
-    
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
       this.animationId = null;
     }
   }
 
-  /**
-   * Destroys the game instance and cleans up resources
-   */
   destroy() {
     this.stop();
-    
-    if (this.eventHandler) {
-      this.eventHandler.destroy();
-    }
-    
-    if (this.tweakpane) {
-      this.tweakpane.destroy();
-    }
+    if (this.eventHandler) this.eventHandler.destroy();
   }
 
   /**
-   * Sets up canvas dimensions and styling
+   * Resize canvas only (no background gen — that comes after _createFrames)
    * @private
    */
-  _setupCanvas() {
-    const containerSize = Math.min(
-      window.innerHeight * 0.7,
-      window.innerWidth * 0.8,
-      600
-    );
-
-    this.renderer.resize(containerSize, containerSize);
+  _resizeCanvas(width, height) {
+    this.canvas.width = width;
+    this.canvas.height = height;
   }
 
   /**
-   * Creates the nested frame structure
+   * Compute frames so:
+   *  - FRAME_THICKNESS = GAP = DOT_SPACING (20px)
+   *  - canvasMax chosen so innermost regular frame = 120px → exact 20px gap to green
+   *  - All frame positions derived as integers from canvasMax
    * @private
    */
   _createFrames() {
     this.frames = [];
-    const stepDown = (this.config.GAP + this.config.FRAME_THICKNESS) * 2;
 
-    for (let i = 0; i < this.config.NUM_FRAMES; i++) {
-      const isLastFrame = i === this.config.NUM_FRAMES - 1;
-      const size = isLastFrame ? 40 : this.canvas.width - i * stepDown;
-      const position = (this.canvas.width - size) / 2;
+    const rawMax = Math.max(this.canvas.width, this.canvas.height);
+    const nOuter = Math.ceil((rawMax - INNERMOST_FRAME_SIZE) / STEP);
+    const canvasMax = INNERMOST_FRAME_SIZE + nOuter * STEP;
 
-      this.frames.push({
-        x: position,
-        y: position,
-        vx: 0,
-        vy: 0,
-        width: size,
-        height: size,
-      });
+    // Base rest position (integer via Math.round; ≤0.5px off for odd-parity screens)
+    const baseRestX = Math.round((this.canvas.width  - canvasMax) / 2);
+    const baseRestY = Math.round((this.canvas.height - canvasMax) / 2);
+
+    // Regular frames: canvasMax … 120, stepping by STEP=80
+    for (let i = 0; i <= nOuter; i++) {
+      const size  = canvasMax - i * STEP;
+      const restX = baseRestX + i * (STEP / 2);  // STEP/2=40, always integer
+      const restY = baseRestY + i * (STEP / 2);
+      this.frames.push({ x: restX, y: restY, vx: 0, vy: 0,
+                         width: size, height: size, restX, restY });
     }
+
+    // Green block (centered)
+    const gRestX = Math.round((this.canvas.width  - GREEN_SIZE) / 2);
+    const gRestY = Math.round((this.canvas.height - GREEN_SIZE) / 2);
+    this.frames.push({ x: gRestX, y: gRestY, vx: 0, vy: 0,
+                       width: GREEN_SIZE, height: GREEN_SIZE,
+                       restX: gRestX, restY: gRestY });
+
+    if (this.eventHandler) this.eventHandler.setFrames(this.frames);
   }
 
-  /**
-   * Initializes the event handler with drag callbacks
-   * @private
-   */
   _initializeEventHandler() {
-    const dragTarget = this.frames[this.config.NUM_FRAMES - 1];
-    this.eventHandler = new EventHandler(this.canvas, dragTarget);
-
+    this.eventHandler = new EventHandler(this.canvas, this.frames, FRAME_THICKNESS);
     this.eventHandler.setDragCallbacks(
-      this._onDragStart.bind(this),
-      this._onDragMove.bind(this),
-      this._onDragEnd.bind(this)
+      () => this.physics.stopAllMovement(this.frames),
+      null,
+      null
     );
   }
 
-  /**
-   * Main animation loop
-   * @private
-   */
   _animate() {
-    if (!this.isRunning) {
-      return;
-    }
-
+    if (!this.isRunning) return;
     this._updatePhysics();
     this._render();
-
     this.animationId = requestAnimationFrame(this._animate.bind(this));
   }
 
-  /**
-   * Updates game physics based on current state
-   * @private
-   */
   _updatePhysics() {
     if (this.eventHandler.isDragging()) {
-      this.physics.updateDragPhysics(this.frames, this.config.NUM_FRAMES);
+      this.physics.updateDragPhysics(this.frames, this.eventHandler.getDraggedIndex());
     } else {
-      // Settling physics is currently disabled but ready for use
-      // this.physics.updateSettlingPhysics(
-      //   this.frames,
-      //   this.canvas.width,
-      //   this.canvas.height
-      // );
+      this.physics.updateSettlingPhysics(this.frames);
     }
   }
 
-  /**
-   * Renders the current game state
-   * @private
-   */
   _render() {
-    const isDragging = this.eventHandler.isDragging();
-    this.renderer.drawScene(this.frames, isDragging);
+    this.renderer.drawScene(this.frames, this.eventHandler.isDragging());
   }
 
-  /**
-   * Handles drag start events
-   * @private
-   */
-  _onDragStart() {
-    this.physics.stopAllMovement(this.frames);
-  }
-
-  /**
-   * Handles drag move events
-   * @param {Object} mousePos - Current mouse position
-   * @private
-   */
-  _onDragMove(mousePos) {
-    // Additional drag move logic can be added here if needed
-  }
-
-  /**
-   * Handles drag end events
-   * @private
-   */
-  _onDragEnd() {
-    // Additional drag end logic can be added here if needed
-  }
-
-  /**
-   * Gets the current game state
-   * @returns {Object} Object containing frames and configuration
-   */
-  getState() {
-    return {
-      frames: [...this.frames],
-      config: { ...this.config },
-      isRunning: this.isRunning,
-      isDragging: this.eventHandler ? this.eventHandler.isDragging() : false,
-    };
-  }
-
-  /**
-   * Updates game configuration
-   * @param {Object} newConfig - New configuration values
-   */
-  updateConfig(newConfig) {
-    this.config = { ...this.config, ...newConfig };
-    this.physics = new Physics(this.config);
-    this.renderer = new Renderer(this.canvas, this.config);
-    
-    // Regenerate background dots when renderer is recreated
-    this.renderer.generateBackground();
-  }
-
-  /**
-   * Resizes the game canvas
-   * @param {number} width - New canvas width
-   * @param {number} height - New canvas height
-   */
   resize(width, height) {
-    this.renderer.resize(width, height);
+    this._resizeCanvas(width, height);
     this._createFrames();
-    
-    if (this.eventHandler) {
-      const dragTarget = this.frames[this.config.NUM_FRAMES - 1];
-      this.eventHandler.setDragTarget(dragTarget);
-    }
+    this.renderer.generateBackground(this.frames);
   }
-
-  /**
-   * Checks if the app is running in development mode
-   * @returns {boolean} True if in development mode
-   * @private
-   */
-  _isDevelopmentMode() {
-    // Check for localhost or common development ports
-    const hostname = window.location.hostname;
-    const port = window.location.port;
-    
-    return (
-      hostname === 'localhost' ||
-      hostname === '127.0.0.1' ||
-      hostname === '0.0.0.0' ||
-      port === '3000' ||
-      port === '3001' ||
-      port === '5173' ||
-      port === '8080' ||
-      hostname.includes('.local')
-    );
-  }
-
 }

@@ -1,79 +1,95 @@
-/**
- * Renderer for the FramePusher game
- * Handles all canvas drawing operations including background and frames
- */
 export class Renderer {
   constructor(canvas, config) {
     this.canvas = canvas;
-    this.ctx = canvas.getContext('2d');
+    this.ctx = canvas.getContext("2d");
     this.FRAME_THICKNESS = config.FRAME_THICKNESS;
     this.backgroundDots = [];
   }
 
   /**
-   * Generates the background dot pattern
-   * Creates a grid of colorful dots with random hues
+   * Generate dot grid aligned to frame border centerlines.
+   * The outermost frame's left/top border center becomes the grid origin,
+   * so dots fall exactly in the center of every frame band and every gap.
+   * @param {Array} frames
    */
-  generateBackground() {
+  generateBackground(frames) {
     this.backgroundDots = [];
-    const dotRadius = 4;
-    const dotSpacing = 20;
+    if (!frames || frames.length === 0) return;
 
-    // Generate dots using nested for loops for precise control
-    for (let x = 0; x < this.canvas.width; x += dotSpacing) {
-      for (let y = 0; y < this.canvas.height; y += dotSpacing) {
+    const DOT_SPACING = 20;
+    const dotRadius = 9;
+    const half = DOT_SPACING / 2; // 10 — half frame thickness
+
+    // Grid origin = outermost frame border centerline
+    const originX = frames[0].restX + half;
+    const originY = frames[0].restY + half;
+
+    // Map origin into [0, DOT_SPACING) then extend left/up by one spacing for edge coverage
+    const startX = ((originX % DOT_SPACING) + DOT_SPACING) % DOT_SPACING;
+    const startY = ((originY % DOT_SPACING) + DOT_SPACING) % DOT_SPACING;
+    const xBegin = startX > 0 ? startX - DOT_SPACING : startX;
+    const yBegin = startY > 0 ? startY - DOT_SPACING : startY;
+
+    for (let x = xBegin; x <= this.canvas.width; x += DOT_SPACING) {
+      for (let y = yBegin; y <= this.canvas.height; y += DOT_SPACING) {
         const hue = Math.random() * 360;
-        
         this.backgroundDots.push({
-          x: x,
-          y: y,
+          x,
+          y,
           radius: dotRadius,
-          color: `hsl(${hue}, 100%, 70%)`,
+          //color: `hsl(${hue}, 100%, 70%)`,
+          color: `rgb(255,255,255)`,
         });
       }
     }
   }
 
   /**
-   * Draws the complete scene including background and frames
-   * @param {Array} frames - Array of frame objects to render
-   * @param {boolean} isDragging - Current dragging state
+   * Draw complete scene
+   * @param {Array}   frames
+   * @param {boolean} isDragging
    */
   drawScene(frames, isDragging) {
     this._clearCanvas();
-    this._drawBackground();
+    this._drawBackground(frames[frames.length - 1]);
     this._drawFrames(frames, isDragging);
   }
 
-  /**
-   * Clears the entire canvas
-   * @private
-   */
   _clearCanvas() {
     this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
   }
 
   /**
-   * Draws the background dot pattern
-   * Uses for...of loop for clean iteration
+   * Draw dots with a white reflection glint toward the green block center.
+   * @param {Object} greenBlock
    * @private
    */
-  _drawBackground() {
+  _drawBackground(greenBlock) {
+    const gcx = greenBlock.x + greenBlock.width / 2;
+    const gcy = greenBlock.y + greenBlock.height / 2;
+
     for (const dot of this.backgroundDots) {
+      // Colored dot
       this.ctx.beginPath();
       this.ctx.fillStyle = dot.color;
       this.ctx.arc(dot.x, dot.y, dot.radius, 0, Math.PI * 2);
       this.ctx.fill();
+
+      // White glint offset toward green block center
+      const dx = gcx - dot.x;
+      const dy = gcy - dot.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const glintX = dot.x + (dx / dist) * 6;
+      const glintY = dot.y + (dy / dist) * 6;
+
+      this.ctx.beginPath();
+      //this.ctx.fillStyle = `rgba(255,255,255,${alpha.toFixed(2)})`;
+      this.ctx.fillStyle = `rgb(0,0,0)`;
+      this.ctx.arc(glintX, glintY, dot.radius * 0.2, 0, Math.PI * 2);
+      this.ctx.fill();
     }
   }
 
-  /**
-   * Draws all frames with proper styling and shadows
-   * Uses for loop for index-based rendering logic
-   * @param {Array} frames - Array of frame objects
-   * @param {boolean} isDragging - Current dragging state
-   * @private
-   */
   _drawFrames(frames, isDragging) {
     for (let i = 0; i < frames.length; i++) {
       const frame = frames[i];
@@ -83,7 +99,7 @@ export class Renderer {
       this.ctx.translate(frame.x, frame.y);
 
       if (isLastFrame) {
-        this._drawDraggableSquare(frame, isDragging);
+        this._drawGreenBlock(frame, isDragging);
       } else {
         this._drawFrameBorder(frame);
       }
@@ -92,64 +108,37 @@ export class Renderer {
     }
   }
 
-  /**
-   * Draws a frame border (hollow rectangle with shadow)
-   * @param {Object} frame - Frame object with dimensions
-   * @private
-   */
   _drawFrameBorder(frame) {
-    this.ctx.strokeStyle = '#ffffff';
+    this.ctx.strokeStyle = "#ffffff";
     this.ctx.lineWidth = this.FRAME_THICKNESS;
-    this.ctx.shadowColor = 'rgba(0,0,0,0.2)';
+    this.ctx.shadowColor = "rgba(0,0,0,0.2)";
     this.ctx.shadowBlur = 15;
     this.ctx.shadowOffsetY = 5;
 
-    const halfThickness = this.FRAME_THICKNESS / 2;
-    const adjustedWidth = frame.width - this.FRAME_THICKNESS;
-    const adjustedHeight = frame.height - this.FRAME_THICKNESS;
-
+    const half = this.FRAME_THICKNESS / 2;
     this.ctx.strokeRect(
-      halfThickness,
-      halfThickness,
-      adjustedWidth,
-      adjustedHeight
+      half,
+      half,
+      frame.width - this.FRAME_THICKNESS,
+      frame.height - this.FRAME_THICKNESS,
     );
   }
 
-  /**
-   * Draws the draggable square (solid rectangle with shadow)
-   * @param {Object} frame - Frame object with dimensions
-   * @param {boolean} isDragging - Current dragging state
-   * @private
-   */
-  _drawDraggableSquare(frame, isDragging) {
-    this.ctx.fillStyle = isDragging ? '#66bb6a' : '#43a047';
-    this.ctx.shadowColor = 'rgba(0,0,0,0.3)';
+  _drawGreenBlock(frame, isDragging) {
+    this.ctx.fillStyle = isDragging ? "#66bb6a" : "#43a047";
+    this.ctx.shadowColor = "rgba(0,0,0,0.3)";
     this.ctx.shadowBlur = 15;
     this.ctx.shadowOffsetY = 5;
-
     this.ctx.fillRect(0, 0, frame.width, frame.height);
   }
 
-  /**
-   * Updates canvas size and regenerates background
-   * @param {number} width - New canvas width
-   * @param {number} height - New canvas height
-   */
+  /** Resize canvas only — caller must regenerate background after frames are rebuilt */
   resize(width, height) {
     this.canvas.width = width;
     this.canvas.height = height;
-    this.generateBackground();
   }
 
-  /**
-   * Gets the current canvas dimensions
-   * @returns {Object} Object with width and height properties
-   */
   getDimensions() {
-    return {
-      width: this.canvas.width,
-      height: this.canvas.height,
-    };
+    return { width: this.canvas.width, height: this.canvas.height };
   }
 }

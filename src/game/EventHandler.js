@@ -1,21 +1,24 @@
 /**
  * Event handler for the FramePusher game
- * Manages mouse interactions and drag operations
+ * Manages mouse/touch interactions and drag operations for any frame
  */
 export class EventHandler {
-  constructor(canvas, dragTarget) {
+  constructor(canvas, frames, frameThickness) {
     this.canvas = canvas;
+    this.frames = frames;
+    this.frameThickness = frameThickness;
+
     this.dragInfo = {
       isDragging: false,
-      target: dragTarget,
+      draggedIndex: -1,
       offsetX: 0,
       offsetY: 0,
     };
-    
+
     this.onDragStart = null;
     this.onDragEnd = null;
     this.onDragMove = null;
-    
+
     this._bindEvents();
   }
 
@@ -24,42 +27,39 @@ export class EventHandler {
    * @private
    */
   _bindEvents() {
-    // Mouse events
-    this.canvas.addEventListener('mousedown', this._handleMouseDown.bind(this));
-    window.addEventListener('mousemove', this._handleMouseMove.bind(this));
-    window.addEventListener('mouseup', this._handleMouseUp.bind(this));
-    window.addEventListener('mouseleave', this._handleMouseUp.bind(this));
-    
-    // Touch events for mobile support
-    this.canvas.addEventListener('touchstart', this._handleTouchStart.bind(this), { passive: false });
-    window.addEventListener('touchmove', this._handleTouchMove.bind(this), { passive: false });
-    window.addEventListener('touchend', this._handleTouchEnd.bind(this));
-    window.addEventListener('touchcancel', this._handleTouchEnd.bind(this));
+    this._onMouseDown = this._handleMouseDown.bind(this);
+    this._onMouseMove = this._handleMouseMove.bind(this);
+    this._onMouseUp = this._handleMouseUp.bind(this);
+    this._onTouchStart = this._handleTouchStart.bind(this);
+    this._onTouchMove = this._handleTouchMove.bind(this);
+    this._onTouchEnd = this._handleTouchEnd.bind(this);
+
+    this.canvas.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('mouseup', this._onMouseUp);
+
+    this.canvas.addEventListener('touchstart', this._onTouchStart, { passive: false });
+    window.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    window.addEventListener('touchend', this._onTouchEnd);
+    window.addEventListener('touchcancel', this._onTouchEnd);
   }
 
   /**
    * Removes all event listeners
-   * Call this when destroying the game instance
    */
   destroy() {
-    // Remove mouse events
-    this.canvas.removeEventListener('mousedown', this._handleMouseDown.bind(this));
-    window.removeEventListener('mousemove', this._handleMouseMove.bind(this));
-    window.removeEventListener('mouseup', this._handleMouseUp.bind(this));
-    window.removeEventListener('mouseleave', this._handleMouseUp.bind(this));
-    
-    // Remove touch events
-    this.canvas.removeEventListener('touchstart', this._handleTouchStart.bind(this));
-    window.removeEventListener('touchmove', this._handleTouchMove.bind(this));
-    window.removeEventListener('touchend', this._handleTouchEnd.bind(this));
-    window.removeEventListener('touchcancel', this._handleTouchEnd.bind(this));
+    this.canvas.removeEventListener('mousedown', this._onMouseDown);
+    window.removeEventListener('mousemove', this._onMouseMove);
+    window.removeEventListener('mouseup', this._onMouseUp);
+
+    this.canvas.removeEventListener('touchstart', this._onTouchStart);
+    window.removeEventListener('touchmove', this._onTouchMove);
+    window.removeEventListener('touchend', this._onTouchEnd);
+    window.removeEventListener('touchcancel', this._onTouchEnd);
   }
 
   /**
    * Sets callback functions for drag events
-   * @param {Function} onDragStart - Called when dragging starts
-   * @param {Function} onDragMove - Called during dragging
-   * @param {Function} onDragEnd - Called when dragging ends
    */
   setDragCallbacks(onDragStart, onDragMove, onDragEnd) {
     this.onDragStart = onDragStart;
@@ -68,126 +68,65 @@ export class EventHandler {
   }
 
   /**
-   * Updates the drag target (the draggable frame)
-   * @param {Object} target - The frame object that can be dragged
+   * Updates the frames array reference (called after frame recreation)
    */
-  setDragTarget(target) {
-    this.dragInfo.target = target;
+  setFrames(frames) {
+    this.frames = frames;
   }
 
   /**
    * Gets the current dragging state
-   * @returns {boolean} True if currently dragging
+   * @returns {boolean}
    */
   isDragging() {
     return this.dragInfo.isDragging;
   }
 
   /**
-   * Handles mouse down events
-   * Initiates dragging if mouse is over the drag target
-   * @param {MouseEvent} event - The mouse event
-   * @private
+   * Gets the index of the currently dragged frame, or -1 if not dragging
+   * @returns {number}
    */
+  getDraggedIndex() {
+    return this.dragInfo.draggedIndex;
+  }
+
+  // ─── Mouse events ─────────────────────────────────────────────────────────
+
   _handleMouseDown(event) {
     const position = this._getMousePosition(event);
     this._handleDragStart(event, position);
   }
 
-  /**
-   * Handles mouse move events
-   * Updates drag target position if dragging
-   * @param {MouseEvent} event - The mouse event
-   * @private
-   */
   _handleMouseMove(event) {
-    if (!this.dragInfo.isDragging) {
-      return;
-    }
+    if (!this.dragInfo.isDragging) return;
     const position = this._getMousePosition(event);
     this._handleDragMove(position);
   }
 
-  /**
-   * Handles mouse up events
-   * Ends dragging operation
-   * @private
-   */
   _handleMouseUp() {
     this._handleDragEnd();
   }
 
-  /**
-   * Gets mouse position relative to canvas
-   * @param {MouseEvent} event - The mouse event
-   * @returns {Object} Object with x and y coordinates
-   * @private
-   */
   _getMousePosition(event) {
     const rect = this.canvas.getBoundingClientRect();
-    
-    return {
-      x: event.clientX - rect.left,
-      y: event.clientY - rect.top,
-    };
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
-  /**
-   * Checks if a point is inside a frame
-   * @param {Object} point - Point with x and y coordinates
-   * @param {Object} frame - Frame object with position and dimensions
-   * @returns {boolean} True if point is inside frame
-   * @private
-   */
-  _isPointInFrame(point, frame) {
-    return (
-      point.x > frame.x &&
-      point.x < frame.x + frame.width &&
-      point.y > frame.y &&
-      point.y < frame.y + frame.height
-    );
-  }
+  // ─── Touch events ──────────────────────────────────────────────────────────
 
-  /**
-   * Gets the current drag offset
-   * @returns {Object} Object with offsetX and offsetY
-   */
-  getDragOffset() {
-    return {
-      offsetX: this.dragInfo.offsetX,
-      offsetY: this.dragInfo.offsetY,
-    };
-  }
-
-  /**
-   * Manually sets the dragging state
-   * Useful for programmatic control
-   * @param {boolean} isDragging - The desired dragging state
-   */
-  setDragging(isDragging) {
-    this.dragInfo.isDragging = isDragging;
-    this.canvas.style.cursor = isDragging ? 'grabbing' : 'pointer';
-  }
-
-  /**
-   * Touch event handlers - delegate to shared drag methods
-   */
   _handleTouchStart(event) {
     event.preventDefault();
     const touch = event.touches[0];
     if (!touch) return;
-    
     const position = this._getTouchPosition(touch);
     this._handleDragStart(event, position);
   }
 
   _handleTouchMove(event) {
     if (!this.dragInfo.isDragging) return;
-    
     event.preventDefault();
     const touch = event.touches[0];
     if (!touch) return;
-    
     const position = this._getTouchPosition(touch);
     this._handleDragMove(position);
   }
@@ -196,71 +135,119 @@ export class EventHandler {
     this._handleDragEnd();
   }
 
-  /**
-   * Gets touch position relative to canvas
-   * @param {Touch} touch - The touch object
-   * @returns {Object} Object with x and y coordinates
-   * @private
-   */
   _getTouchPosition(touch) {
     const rect = this.canvas.getBoundingClientRect();
-    return {
-      x: touch.clientX - rect.left,
-      y: touch.clientY - rect.top,
-    };
+    return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+  }
+
+  // ─── Hit testing ───────────────────────────────────────────────────────────
+
+  /**
+   * Checks if a point falls inside a solid (filled) frame
+   * @private
+   */
+  _isPointInFrame(point, frame) {
+    return (
+      point.x >= frame.x &&
+      point.x <= frame.x + frame.width &&
+      point.y >= frame.y &&
+      point.y <= frame.y + frame.height
+    );
   }
 
   /**
-   * Shared drag logic methods
+   * Checks if a point falls on the visible border strip of a hollow frame
+   * @private
    */
-  _handleDragStart(event, position) {
-    const target = this.dragInfo.target;
-    const isOverTarget = this._isPointInFrame(position, target);
+  _isOnFrameBorder(point, frame, thickness) {
+    const inOuter = this._isPointInFrame(point, frame);
+    if (!inOuter) return false;
+    const inInner = (
+      point.x > frame.x + thickness &&
+      point.x < frame.x + frame.width - thickness &&
+      point.y > frame.y + thickness &&
+      point.y < frame.y + frame.height - thickness
+    );
+    return !inInner;
+  }
 
-    if (isOverTarget) {
-      event.preventDefault();
-      
-      this.dragInfo.isDragging = true;
-      this.dragInfo.offsetX = position.x - target.x;
-      this.dragInfo.offsetY = position.y - target.y;
+  /**
+   * Finds the topmost frame the pointer is over, innermost first.
+   * Green block (last frame) uses solid hit-test; others use border hit-test.
+   * @returns {number} Frame index, or -1
+   * @private
+   */
+  _findDraggedFrame(position) {
+    const lastIdx = this.frames.length - 1;
 
-      this.canvas.style.cursor = 'grabbing';
+    // Green block: solid hit-test
+    if (this._isPointInFrame(position, this.frames[lastIdx])) {
+      return lastIdx;
+    }
 
-      if (this.onDragStart) {
-        this.onDragStart();
+    // All other frames: border-only hit-test, innermost to outermost
+    for (let i = lastIdx - 1; i >= 0; i--) {
+      if (this._isOnFrameBorder(position, this.frames[i], this.frameThickness)) {
+        return i;
       }
     }
+
+    return -1;
+  }
+
+  // ─── Shared drag logic ─────────────────────────────────────────────────────
+
+  _handleDragStart(event, position) {
+    const foundIndex = this._findDraggedFrame(position);
+    if (foundIndex === -1) return;
+
+    event.preventDefault();
+
+    const frame = this.frames[foundIndex];
+    this.dragInfo.isDragging = true;
+    this.dragInfo.draggedIndex = foundIndex;
+    this.dragInfo.offsetX = position.x - frame.x;
+    this.dragInfo.offsetY = position.y - frame.y;
+
+    this.canvas.style.cursor = 'grabbing';
+
+    if (this.onDragStart) this.onDragStart();
   }
 
   _handleDragMove(position) {
-    // Calculate new position
+    const di = this.dragInfo.draggedIndex;
+    const draggedFrame = this.frames[di];
+    const green = this.frames[this.frames.length - 1];
+
     let newX = position.x - this.dragInfo.offsetX;
     let newY = position.y - this.dragInfo.offsetY;
-    
-    // Apply canvas boundary constraints
-    const maxX = this.canvas.width - this.dragInfo.target.width;
-    const maxY = this.canvas.height - this.dragInfo.target.height;
-    
-    // Clamp position to canvas boundaries
-    newX = Math.max(0, Math.min(newX, maxX));
-    newY = Math.max(0, Math.min(newY, maxY));
-    
-    this.dragInfo.target.x = newX;
-    this.dragInfo.target.y = newY;
 
-    if (this.onDragMove) {
-      this.onDragMove(position);
+    // Clamp movement so the green block never leaves the canvas
+    const gOffX = green.x - draggedFrame.x;
+    const gOffY = green.y - draggedFrame.y;
+
+    const clampedGX = Math.max(0, Math.min(newX + gOffX, this.canvas.width - green.width));
+    const clampedGY = Math.max(0, Math.min(newY + gOffY, this.canvas.height - green.height));
+    newX = clampedGX - gOffX;
+    newY = clampedGY - gOffY;
+
+    const dx = newX - draggedFrame.x;
+    const dy = newY - draggedFrame.y;
+
+    // Move dragged frame and all inner frames together
+    for (let i = di; i < this.frames.length; i++) {
+      this.frames[i].x += dx;
+      this.frames[i].y += dy;
     }
+
+    if (this.onDragMove) this.onDragMove(position);
   }
 
   _handleDragEnd() {
-    if (this.dragInfo.isDragging) {
-      this.dragInfo.isDragging = false;
-      this.canvas.style.cursor = 'pointer';
-
-      if (this.onDragEnd) {
-        this.onDragEnd();
-      }
-    }
+    if (!this.dragInfo.isDragging) return;
+    this.dragInfo.isDragging = false;
+    this.dragInfo.draggedIndex = -1;
+    this.canvas.style.cursor = 'pointer';
+    if (this.onDragEnd) this.onDragEnd();
   }
 }

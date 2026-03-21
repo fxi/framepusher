@@ -11,60 +11,41 @@ export class Physics {
   }
 
   /**
-   * Updates physics during dragging state
-   * Pushes parent frames based on child frame positions
-   * @param {Array} frames - Array of frame objects
-   * @param {number} numFrames - Total number of frames
+   * Updates physics during dragging.
+   * Only outer frames (indices 0..dragIndex-1) are pushed;
+   * inner frames move rigidly with the dragged frame via EventHandler.
+   * @param {Array} frames
+   * @param {number} dragIndex - Index of the frame being dragged
    */
-  updateDragPhysics(frames, numFrames) {
-    // Loop from the second-to-last frame outwards using for loop
-    for (let i = numFrames - 2; i >= 0; i--) {
+  updateDragPhysics(frames, dragIndex) {
+    for (let i = dragIndex - 1; i >= 0; i--) {
       const child = frames[i + 1];
       const parent = frames[i];
-      const parentInnerOffset = this.FRAME_THICKNESS;
-
-      // Calculate target positions for pushing logic
-      this._applyLeftPush(parent, child, parentInnerOffset);
-      this._applyRightPush(parent, child, parentInnerOffset);
-      this._applyTopPush(parent, child, parentInnerOffset);
-      this._applyBottomPush(parent, child, parentInnerOffset);
+      this._applyLeftPush(parent, child, this.FRAME_THICKNESS);
+      this._applyRightPush(parent, child, this.FRAME_THICKNESS);
+      this._applyTopPush(parent, child, this.FRAME_THICKNESS);
+      this._applyBottomPush(parent, child, this.FRAME_THICKNESS);
     }
   }
 
   /**
-   * Updates physics during settling state (spring-based animation)
-   * @param {Array} frames - Array of frame objects
-   * @param {number} canvasWidth - Canvas width for boundary calculations
-   * @param {number} canvasHeight - Canvas height for boundary calculations
+   * Settling physics: springs each frame toward its restX/restY with damping.
+   * @param {Array} frames
    */
-  updateSettlingPhysics(frames, canvasWidth, canvasHeight) {
-    // Apply velocity and damping to all frames
+  updateSettlingPhysics(frames) {
     for (const frame of frames) {
+      frame.vx += (frame.restX - frame.x) * this.SPRING_STRENGTH;
+      frame.vy += (frame.restY - frame.y) * this.SPRING_STRENGTH;
       frame.vx *= this.DAMPING;
       frame.vy *= this.DAMPING;
       frame.x += frame.vx;
       frame.y += frame.vy;
     }
-
-    // Apply spring forces for collisions using for loop
-    for (let i = frames.length - 1; i >= 0; i--) {
-      const frame = frames[i];
-      const parent = this._getParentFrame(frames, i, canvasWidth, canvasHeight);
-      const parentInnerOffset = i > 0 ? this.FRAME_THICKNESS : 0;
-
-      const boundaries = this._calculateBoundaries(
-        parent,
-        frame,
-        parentInnerOffset
-      );
-
-      this._applySpringForces(frame, parent, boundaries, i > 0);
-    }
   }
 
   /**
    * Stops all movement by zeroing velocities
-   * @param {Array} frames - Array of frame objects
+   * @param {Array} frames
    */
   stopAllMovement(frames) {
     for (const frame of frames) {
@@ -73,124 +54,38 @@ export class Physics {
     }
   }
 
-  /**
-   * Applies left push logic during dragging
-   * @private
-   */
-  _applyLeftPush(parent, child, parentInnerOffset) {
-    const targetX = child.x - parentInnerOffset;
+  // ─── Push methods ──────────────────────────────────────────────────────────
+  // Each push method also gives the parent a velocity kick for momentum feel.
+
+  _applyLeftPush(parent, child, offset) {
+    const targetX = child.x - offset;
     if (parent.x > targetX) {
+      parent.vx -= (parent.x - targetX) * 0.3;
       parent.x = targetX;
     }
   }
 
-  /**
-   * Applies right push logic during dragging
-   * @private
-   */
-  _applyRightPush(parent, child, parentInnerOffset) {
-    const targetX = child.x + child.width - parent.width + parentInnerOffset;
+  _applyRightPush(parent, child, offset) {
+    const targetX = child.x + child.width - parent.width + offset;
     if (parent.x < targetX) {
+      parent.vx += (targetX - parent.x) * 0.3;
       parent.x = targetX;
     }
   }
 
-  /**
-   * Applies top push logic during dragging
-   * @private
-   */
-  _applyTopPush(parent, child, parentInnerOffset) {
-    const targetY = child.y - parentInnerOffset;
+  _applyTopPush(parent, child, offset) {
+    const targetY = child.y - offset;
     if (parent.y > targetY) {
+      parent.vy -= (parent.y - targetY) * 0.3;
       parent.y = targetY;
     }
   }
 
-  /**
-   * Applies bottom push logic during dragging
-   * @private
-   */
-  _applyBottomPush(parent, child, parentInnerOffset) {
-    const targetY = child.y + child.height - parent.height + parentInnerOffset;
+  _applyBottomPush(parent, child, offset) {
+    const targetY = child.y + child.height - parent.height + offset;
     if (parent.y < targetY) {
+      parent.vy += (targetY - parent.y) * 0.3;
       parent.y = targetY;
     }
   }
-
-  /**
-   * Gets the parent frame or canvas boundaries
-   * @private
-   */
-  _getParentFrame(frames, index, canvasWidth, canvasHeight) {
-    if (index > 0) {
-      return frames[index - 1];
-    }
-    
-    return {
-      x: 0,
-      y: 0,
-      width: canvasWidth,
-      height: canvasHeight,
-      vx: 0,
-      vy: 0,
-    };
-  }
-
-  /**
-   * Calculates boundary constraints for spring physics
-   * @private
-   */
-  _calculateBoundaries(parent, frame, parentInnerOffset) {
-    return {
-      minX: parent.x + parentInnerOffset,
-      maxX: parent.x + parent.width - parentInnerOffset - frame.width,
-      minY: parent.y + parentInnerOffset,
-      maxY: parent.y + parent.height - parentInnerOffset - frame.height,
-    };
-  }
-
-  /**
-   * Applies spring forces based on boundary overlaps
-   * @private
-   */
-  _applySpringForces(frame, parent, boundaries, hasParent) {
-    let overlap;
-
-    // Left boundary spring force
-    overlap = boundaries.minX - frame.x;
-    if (overlap > 0) {
-      frame.vx += overlap * this.SPRING_STRENGTH;
-      if (hasParent) {
-        parent.vx -= overlap * this.SPRING_STRENGTH * 0.5;
-      }
-    }
-
-    // Right boundary spring force
-    overlap = boundaries.maxX - frame.x;
-    if (overlap < 0) {
-      frame.vx += overlap * this.SPRING_STRENGTH;
-      if (hasParent) {
-        parent.vx -= overlap * this.SPRING_STRENGTH * 0.5;
-      }
-    }
-
-    // Top boundary spring force
-    overlap = boundaries.minY - frame.y;
-    if (overlap > 0) {
-      frame.vy += overlap * this.SPRING_STRENGTH;
-      if (hasParent) {
-        parent.vy -= overlap * this.SPRING_STRENGTH * 0.5;
-      }
-    }
-
-    // Bottom boundary spring force
-    overlap = boundaries.maxY - frame.y;
-    if (overlap < 0) {
-      frame.vy += overlap * this.SPRING_STRENGTH;
-      if (hasParent) {
-        parent.vy -= overlap * this.SPRING_STRENGTH * 0.5;
-      }
-    }
-  }
-
 }
