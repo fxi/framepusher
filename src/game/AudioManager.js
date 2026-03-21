@@ -39,9 +39,9 @@ export class AudioManager {
   }
 
   /**
-   * Pitched tick when a frame is pushed by a collision.
+   * Woody tap/knock when a frame first makes contact.
    * Rate-limited to one sound per frame per 80 ms.
-   * Outer frames = low pitch, inner frames = high pitch.
+   * Outer frames = lower pitch, inner frames = higher pitch.
    * Volume scales with collision velocity.
    */
   playCollision(frameIndex, totalFrames, velocity) {
@@ -52,11 +52,36 @@ export class AudioManager {
     if (now - last < 80) return;
     this._cooldowns.set(frameIndex, now);
 
-    const t    = this._ctx.currentTime;
+    const ctx  = this._ctx;
+    const t    = ctx.currentTime;
     const norm = 1 - frameIndex / Math.max(totalFrames - 1, 1); // 0=inner, 1=outer
-    const freq = 220 + norm * 560;                               // 220–780 Hz
-    const vol  = Math.min(0.3, 0.08 + velocity * 0.015);
-    this._tone('triangle', freq, vol, t, 0.002, t + 0.065);
+
+    // Short white-noise burst through a downward-sweeping bandpass → woody tap
+    const bufLen = Math.ceil(ctx.sampleRate * 0.06);
+    const buf    = ctx.createBuffer(1, bufLen, ctx.sampleRate);
+    const data   = buf.getChannelData(0);
+    for (let i = 0; i < bufLen; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.Q.value = 4;
+    const baseFreq = 600 + norm * 1400; // outer≈600 Hz, inner≈2000 Hz
+    filter.frequency.setValueAtTime(baseFreq, t);
+    filter.frequency.exponentialRampToValueAtTime(baseFreq * 0.25, t + 0.04);
+
+    const gain = ctx.createGain();
+    const vol  = Math.min(0.45, 0.18 + velocity * 0.015);
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.055);
+
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(t);
+    src.stop(t + 0.07);
   }
 
   /**

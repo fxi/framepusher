@@ -33,6 +33,9 @@ export class FramePusher {
     // Reset state
     this._isResetting = false;
 
+    // Collision detection: "idx-side" → countdown frames until contact expires
+    this._activeContacts = new Map();
+
     this.physics      = new Physics(this.config);
     this.renderer     = new Renderer(this.canvas, this.config);
     this.audio        = new AudioManager();
@@ -104,10 +107,13 @@ export class FramePusher {
     this.eventHandler.setDragCallbacks(
       (dragIndex) => {
         this.physics.stopAllMovement(this.frames);
+        this._activeContacts.clear();
         this.audio.playGrab(dragIndex, this.frames.length);
       },
       null,
-      null
+      () => {
+        this._activeContacts.clear();
+      }
     );
 
     // Unlock audio on first pointer interaction (required by browsers)
@@ -157,12 +163,19 @@ export class FramePusher {
     if (this.eventHandler.isDragging()) {
       this.physics.updateDragPhysics(this.frames, this.eventHandler.getDraggedIndex());
 
-      // Play collision sound for the outermost frame that was actually pushed
-      const pushed = this.physics.pushedFrameIndices;
-      if (pushed.length > 0) {
-        const outermost = Math.min(...pushed);
+      // Debounce per frame index (not per side) — prevents re-trigger when the
+      // same frame alternates contact sides (e.g. -T vs -B during vertical drag)
+      const contacted   = new Set(this.physics.pushedContacts.map(c => parseInt(c)));
+      const newFrames   = [...contacted].filter(i => !this._activeContacts.has(i));
+      if (newFrames.length > 0) {
+        const outermost = Math.min(...newFrames);
         const vel = Math.hypot(this.frames[outermost].vx, this.frames[outermost].vy);
         this.audio.playCollision(outermost, this.frames.length, vel);
+      }
+      for (const i of contacted) this._activeContacts.set(i, 8);
+      for (const [i, n] of this._activeContacts) {
+        if (n <= 1) this._activeContacts.delete(i);
+        else        this._activeContacts.set(i, n - 1);
       }
 
     } else if (this._isResetting) {

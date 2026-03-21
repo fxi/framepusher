@@ -6,7 +6,7 @@ export class Physics {
     this.SPRING_STRENGTH = config.SPRING_STRENGTH;
 
     // Populated during updateDragPhysics; read by FramePusher for audio
-    this.pushedFrameIndices = [];
+    this.pushedContacts = [];
   }
 
   /**
@@ -16,7 +16,7 @@ export class Physics {
    * Sets this.pushedFrameIndices with indices of frames that actually moved.
    */
   updateDragPhysics(frames, dragIndex) {
-    this.pushedFrameIndices = [];
+    this.pushedContacts = [];
 
     for (let i = dragIndex - 1; i >= 0; i--) {
       const child  = frames[i + 1];
@@ -53,7 +53,7 @@ export class Physics {
     if (parent.x > targetX) {
       parent.vx -= (parent.x - targetX) * 0.3;
       parent.x   = targetX;
-      this.pushedFrameIndices.push(parentIndex);
+      this.pushedContacts.push(`${parentIndex}-L`);
     }
   }
 
@@ -62,7 +62,7 @@ export class Physics {
     if (parent.x < targetX) {
       parent.vx += (targetX - parent.x) * 0.3;
       parent.x   = targetX;
-      this.pushedFrameIndices.push(parentIndex);
+      this.pushedContacts.push(`${parentIndex}-R`);
     }
   }
 
@@ -71,7 +71,7 @@ export class Physics {
     if (parent.y > targetY) {
       parent.vy -= (parent.y - targetY) * 0.3;
       parent.y   = targetY;
-      this.pushedFrameIndices.push(parentIndex);
+      this.pushedContacts.push(`${parentIndex}-T`);
     }
   }
 
@@ -80,7 +80,7 @@ export class Physics {
     if (parent.y < targetY) {
       parent.vy += (targetY - parent.y) * 0.3;
       parent.y   = targetY;
-      this.pushedFrameIndices.push(parentIndex);
+      this.pushedContacts.push(`${parentIndex}-B`);
     }
   }
 }
