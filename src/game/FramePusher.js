@@ -163,7 +163,7 @@ export class FramePusher {
     const audioStartBtn = document.getElementById('audio-start');
     if (audioStartBtn) {
       audioStartBtn.addEventListener('pointerdown', () => {
-        this.audio.unlock();
+        this.audio.playStart();
         audioStartBtn.classList.add('hidden');
         audioStartBtn.addEventListener('transitionend',
           () => audioStartBtn.remove(), { once: true });

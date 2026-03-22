@@ -184,8 +184,8 @@ export class Renderer {
     const h    = frame.height - this.FRAME_THICKNESS;
 
     if (isDarkMode) {
-      this.ctx.strokeStyle   = '#111111';
-      this.ctx.shadowColor   = 'rgba(200,200,200,0.8)';
+      this.ctx.strokeStyle   = '#444444';
+      this.ctx.shadowColor   = 'rgba(0,0,0,0.8)';
       this.ctx.shadowBlur    = 8;
       this.ctx.shadowOffsetX = 0;
       this.ctx.shadowOffsetY = 0;
@@ -202,7 +202,7 @@ export class Renderer {
   _drawGreenBlock(frame, isDragging, isDarkMode) {
     this.ctx.fillStyle = isDragging ? '#66bb6a' : '#43a047';
     if (isDarkMode) {
-      this.ctx.shadowColor   = 'rgba(200,200,200,0.8)';
+      this.ctx.shadowColor   = 'rgba(0,0,0,0.8)';
       this.ctx.shadowBlur    = 8;
       this.ctx.shadowOffsetX = 0;
       this.ctx.shadowOffsetY = 0;

@@ -40,6 +40,30 @@ export class AudioManager {
     }
   }
 
+  /**
+   * Unlock the AudioContext AND play an ascending 3-note chime in one step.
+   * Does NOT require _ready — starts tones against a suspended context so they
+   * queue and play the instant resume() resolves. Must be called from a direct
+   * user-gesture handler (e.g. play button pointerdown) to satisfy iOS WebKit.
+   */
+  playStart() {
+    if (!this._ctx) {
+      try {
+        this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this._unlocked = true;
+      } catch { return; }
+    }
+    if (this._ctx.state === 'suspended') {
+      this._ctx.resume().catch(() => {});
+    }
+    // Schedule 3 ascending tones against the (possibly suspended) context.
+    // ctx.currentTime is 0 while suspended; relative offsets create the stagger.
+    const t = this._ctx.currentTime;
+    this._tone('sine', 330, 0.15, t,        t + 0.01, t + 0.30);
+    this._tone('sine', 440, 0.12, t + 0.06, t + 0.07, t + 0.35);
+    this._tone('sine', 660, 0.09, t + 0.13, t + 0.14, t + 0.42);
+  }
+
   get _ready() {
     return this._unlocked && this._ctx && this._ctx.state === 'running';
   }
