@@ -35,6 +35,11 @@ export class FramePusher {
     this._resetSeqStep   = 0;
     this._resetSeqLocked = new Set();
 
+    // Intro wave state (frames drop in from above on play tap)
+    this._waveActive   = false;
+    this._waveReleased = 0;
+    this._waveTimer    = 0;
+
     // Coasting state (billiard inertia after release)
     this._isCoasting    = false;
     this._lastDragIndex = -1;
@@ -57,6 +62,8 @@ export class FramePusher {
 
   init() {
     this.renderer.generateBackground(this.frames);
+    // Park all frames above the canvas — wave drops them in when play is tapped
+    for (const f of this.frames) { f.y = -f.height - 20; f.vy = 0; }
     this.start();
   }
 
@@ -117,6 +124,7 @@ export class FramePusher {
       (dragIndex) => {
         this.physics.stopAllMovement(this.frames);
         this._activeContacts.clear();
+        this._waveActive     = false;
         this._isCoasting     = false;
         this._resetSeqActive = false; // user takes over — cancel sequence
         this._resetSeqLocked.clear();
@@ -151,7 +159,22 @@ export class FramePusher {
       }
     );
 
-    // Unlock/resume audio on every pointer interaction — iOS suspends the
+    // Play overlay — dismiss on first tap/click, unlock audio context
+    const audioStartBtn = document.getElementById('audio-start');
+    if (audioStartBtn) {
+      audioStartBtn.addEventListener('pointerdown', () => {
+        this.audio.unlock();
+        audioStartBtn.classList.add('hidden');
+        audioStartBtn.addEventListener('transitionend',
+          () => audioStartBtn.remove(), { once: true });
+        // Launch intro wave
+        this._waveActive   = true;
+        this._waveReleased = 0;
+        this._waveTimer    = 0;
+      }, { once: true });
+    }
+
+    // Unlock/resume audio on every subsequent pointer interaction — iOS suspends the
     // AudioContext on page hide and needs resume() on the next user gesture.
     this.canvas.addEventListener('pointerdown', () => this.audio.unlock());
 
@@ -178,6 +201,7 @@ export class FramePusher {
         resetBtn.addEventListener('animationend', () => {
           resetBtn.classList.remove('spinning');
         }, { once: true });
+        this._waveActive     = false;
         this._isCoasting     = false;
         this._resetSeqActive = true;
         this._resetSeqStep   = 0;
@@ -203,6 +227,30 @@ export class FramePusher {
   }
 
   _updatePhysics() {
+    if (this._waveActive) {
+      // Release one frame every 8 ticks, outer first
+      if (--this._waveTimer <= 0 && this._waveReleased < this.frames.length) {
+        this._waveReleased++;
+        this._waveTimer = 8;
+      }
+      // Gravity-fall each released frame until it lands at restY
+      let allLanded = this._waveReleased >= this.frames.length;
+      for (let i = 0; i < this._waveReleased; i++) {
+        const f = this.frames[i];
+        if (f.y >= f.restY) { f.y = f.restY; f.vy = 0; continue; }
+        allLanded = false;
+        f.vy = Math.min(f.vy + 1.5, 25);
+        f.y += f.vy;
+        if (f.y >= f.restY) {
+          f.y = f.restY; f.vy = 0;
+          this.audio.playCollision(i, this.frames.length, 20);
+          this._bounceFrames = 12;
+        }
+      }
+      if (allLanded) this._waveActive = false;
+      return;
+    }
+
     if (this.eventHandler.isDragging()) {
       this.physics.updateDragPhysics(this.frames, this.eventHandler.getDraggedIndex());
 
@@ -343,6 +391,7 @@ export class FramePusher {
   }
 
   resize(width, height) {
+    this._waveActive = false;
     this._resizeCanvas(width, height);
     this._createFrames();
     this.renderer.generateBackground(this.frames);

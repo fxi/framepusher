@@ -27,6 +27,17 @@ export class AudioManager {
     if (this._ctx.state === 'suspended') {
       this._ctx.resume().catch(() => {});
     }
+    // Silent 1-sample buffer — forces iOS WebKit to synchronously mark the context
+    // as gesture-activated (resume() alone is async and may not suffice in time)
+    if (this._ctx.state !== 'running') {
+      try {
+        const buf = this._ctx.createBuffer(1, 1, this._ctx.sampleRate);
+        const src = this._ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this._ctx.destination);
+        src.start(0);
+      } catch (_) {}
+    }
   }
 
   get _ready() {
