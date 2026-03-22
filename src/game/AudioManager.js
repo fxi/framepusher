@@ -10,19 +10,27 @@ export class AudioManager {
     this._cooldowns = new Map(); // frameIndex → timestamp (ms)
   }
 
-  /** Create (or resume) the AudioContext. Must be called from a user gesture. */
+  /**
+   * Create (or resume) the AudioContext. Safe to call on every user gesture —
+   * iOS/Safari suspends the context on page hide and requires resume() again.
+   */
   unlock() {
-    if (this._unlocked) return;
-    try {
-      this._ctx = new (window.AudioContext || window.webkitAudioContext)();
-      this._unlocked = true;
-    } catch {
-      // Audio not available — degrade silently
+    if (!this._ctx) {
+      try {
+        this._ctx = new (window.AudioContext || window.webkitAudioContext)();
+        this._unlocked = true;
+      } catch {
+        return; // Audio not available — degrade silently
+      }
+    }
+    // iOS suspends the context; resume on every gesture to ensure audio works
+    if (this._ctx.state === 'suspended') {
+      this._ctx.resume().catch(() => {});
     }
   }
 
   get _ready() {
-    return this._unlocked && this._ctx;
+    return this._unlocked && this._ctx && this._ctx.state === 'running';
   }
 
   // ─── Public sound events ───────────────────────────────────────────────────
@@ -54,7 +62,7 @@ export class AudioManager {
 
     const ctx  = this._ctx;
     const t    = ctx.currentTime;
-    const norm = 1 - frameIndex / Math.max(totalFrames - 1, 1); // 0=inner, 1=outer
+    const norm = frameIndex / Math.max(totalFrames - 1, 1); // 0=outer, 1=inner
 
     // Short white-noise burst through a downward-sweeping bandpass → woody tap
     const bufLen = Math.ceil(ctx.sampleRate * 0.06);
@@ -68,7 +76,7 @@ export class AudioManager {
     const filter = ctx.createBiquadFilter();
     filter.type = 'bandpass';
     filter.Q.value = 4;
-    const baseFreq = 600 + norm * 1400; // outer≈600 Hz, inner≈2000 Hz
+    const baseFreq = 600 + norm * 1400; // outer≈600 Hz (deep thud), inner≈2000 Hz (sharp tap)
     filter.frequency.setValueAtTime(baseFreq, t);
     filter.frequency.exponentialRampToValueAtTime(baseFreq * 0.25, t + 0.04);
 

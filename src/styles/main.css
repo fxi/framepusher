@@ -7,6 +7,11 @@
 body {
   overflow: hidden;
   background: #333;
+  transition: background 0.4s;
+}
+
+body.dark-mode {
+  background: #0d0d0d;
 }
 
 #game-canvas {
@@ -16,6 +21,46 @@ body {
   left: 0;
   cursor: pointer;
 }
+
+#dark-btn {
+  position: fixed;
+  bottom: 24px;
+  right: 84px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 0.2s, transform 0.15s;
+}
+
+#dark-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+  transform: scale(1.1);
+}
+
+#dark-btn:active {
+  transform: scale(0.92);
+}
+
+#dark-btn svg {
+  width: 22px;
+  height: 22px;
+  fill: rgba(255, 255, 255, 0.85);
+  display: block;
+}
+
+/* Icon visibility: moon in light mode, sun in dark mode */
+#dark-btn .icon-sun { display: none; }
+#dark-btn .icon-moon { display: block; }
+body.dark-mode #dark-btn .icon-sun { display: block; }
+body.dark-mode #dark-btn .icon-moon { display: none; }
 
 #reset-btn {
   position: fixed;

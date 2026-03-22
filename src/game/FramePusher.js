@@ -33,6 +33,9 @@ export class FramePusher {
     // Reset state
     this._isResetting = false;
 
+    // Dark mode state
+    this.isDarkMode = false;
+
     // Collision detection: "idx-side" → countdown frames until contact expires
     this._activeContacts = new Map();
 
@@ -116,12 +119,9 @@ export class FramePusher {
       }
     );
 
-    // Unlock audio on first pointer interaction (required by browsers)
-    const unlock = () => {
-      this.audio.unlock();
-      this.canvas.removeEventListener('pointerdown', unlock);
-    };
-    this.canvas.addEventListener('pointerdown', unlock);
+    // Unlock/resume audio on every pointer interaction — iOS suspends the
+    // AudioContext on page hide and needs resume() on the next user gesture.
+    this.canvas.addEventListener('pointerdown', () => this.audio.unlock());
 
     // Cursor tracking — eyes follow pointer / touch
     this.canvas.addEventListener('mousemove', (e) => {
@@ -148,6 +148,15 @@ export class FramePusher {
         }, { once: true });
         this._isResetting = true;
         this.audio.playReset();
+      });
+    }
+
+    // Dark mode toggle button
+    const darkBtn = document.getElementById('dark-btn');
+    if (darkBtn) {
+      darkBtn.addEventListener('click', () => {
+        this.isDarkMode = !this.isDarkMode;
+        document.body.classList.toggle('dark-mode', this.isDarkMode);
       });
     }
   }
@@ -210,7 +219,7 @@ export class FramePusher {
       gcx, gcy,
       this._bounceFrames > 0
     );
-    this.renderer.drawScene(this.frames, this.eventHandler.isDragging());
+    this.renderer.drawScene(this.frames, this.eventHandler.isDragging(), this.isDarkMode);
   }
 
   resize(width, height) {

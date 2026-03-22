@@ -37,6 +37,7 @@ export class Renderer {
           state: 'idle',
           stateFrames: 0,
           peekCountdown: Math.floor(180 + Math.random() * 300), // 3–8 s stagger
+          peekAtCursor: false,
         });
       }
     }
@@ -79,16 +80,24 @@ export class Renderer {
       if (eye.state === 'idle') {
         eye.peekCountdown--;
         if (eye.peekCountdown <= 0) {
-          eye.state       = 'peek';
-          eye.stateFrames = 30 + Math.floor(Math.random() * 30);
+          eye.state         = 'peek';
+          eye.stateFrames   = 30 + Math.floor(Math.random() * 30);
           eye.peekCountdown = 180 + Math.floor(Math.random() * 300);
+          // 35% chance to glance at cursor instead of green block
+          eye.peekAtCursor  = cursorPos !== null && Math.random() < 0.35;
         }
       }
 
       // --- Compute look target ---
       let tx = eye.x, ty = eye.y; // idle: pupils centered
-      if (eye.state === 'peek' || eye.state === 'surprised') {
+      if (eye.state === 'surprised') {
         tx = greenCx; ty = greenCy;
+      } else if (eye.state === 'peek') {
+        if (eye.peekAtCursor && cursorPos) {
+          tx = cursorPos.x; ty = cursorPos.y;
+        } else {
+          tx = greenCx; ty = greenCy;
+        }
       } else if (eye.state === 'cursor' && cursorPos) {
         tx = cursorPos.x; ty = cursorPos.y;
       }
@@ -112,11 +121,12 @@ export class Renderer {
    * Draw complete scene
    * @param {Array}   frames
    * @param {boolean} isDragging
+   * @param {boolean} isDarkMode
    */
-  drawScene(frames, isDragging) {
+  drawScene(frames, isDragging, isDarkMode) {
     this._clearCanvas();
-    this._drawBackground();
-    this._drawFrames(frames, isDragging);
+    this._drawBackground(isDarkMode);
+    this._drawFrames(frames, isDragging, isDarkMode);
   }
 
   _clearCanvas() {
@@ -127,23 +137,29 @@ export class Renderer {
    * Draw all eyes using their current pupil positions (updated by updateEyes).
    * @private
    */
-  _drawBackground() {
+  _drawBackground(isDarkMode) {
+    // Reset shadows carried over from previous frame's frame-drawing pass
+    this.ctx.shadowColor   = 'transparent';
+    this.ctx.shadowBlur    = 0;
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 0;
+
     for (const eye of this.backgroundDots) {
-      // White eyeball
+      // Eyeball — same design as light mode, just dimmed in dark mode
       this.ctx.beginPath();
-      this.ctx.fillStyle = '#ffffff';
+      this.ctx.fillStyle = isDarkMode ? 'rgba(255,255,255,0.5)' : '#ffffff';
       this.ctx.arc(eye.x, eye.y, eye.radius, 0, Math.PI * 2);
       this.ctx.fill();
 
-      // Black pupil
+      // Pupil
       this.ctx.beginPath();
-      this.ctx.fillStyle = '#000000';
+      this.ctx.fillStyle = isDarkMode ? '#111111' : '#000000';
       this.ctx.arc(eye.pupilX, eye.pupilY, eye.radius * 0.35, 0, Math.PI * 2);
       this.ctx.fill();
     }
   }
 
-  _drawFrames(frames, isDragging) {
+  _drawFrames(frames, isDragging, isDarkMode) {
     for (let i = 0; i < frames.length; i++) {
       const frame       = frames[i];
       const isLastFrame = i === frames.length - 1;
@@ -152,33 +168,50 @@ export class Renderer {
       this.ctx.translate(frame.x, frame.y);
 
       if (isLastFrame) {
-        this._drawGreenBlock(frame, isDragging);
+        this._drawGreenBlock(frame, isDragging, isDarkMode);
       } else {
-        this._drawFrameBorder(frame);
+        this._drawFrameBorder(frame, isDarkMode);
       }
 
       this.ctx.restore();
     }
   }
 
-  _drawFrameBorder(frame) {
-    this.ctx.strokeStyle   = '#ffffff';
-    this.ctx.lineWidth     = this.FRAME_THICKNESS;
-    this.ctx.shadowColor   = 'rgba(0,0,0,0.2)';
-    this.ctx.shadowBlur    = 15;
-    this.ctx.shadowOffsetY = 5;
-
+  _drawFrameBorder(frame, isDarkMode) {
+    this.ctx.lineWidth = this.FRAME_THICKNESS;
     const half = this.FRAME_THICKNESS / 2;
-    this.ctx.strokeRect(half, half,
-                        frame.width  - this.FRAME_THICKNESS,
-                        frame.height - this.FRAME_THICKNESS);
+    const w    = frame.width  - this.FRAME_THICKNESS;
+    const h    = frame.height - this.FRAME_THICKNESS;
+
+    if (isDarkMode) {
+      this.ctx.strokeStyle   = '#111111';
+      this.ctx.shadowColor   = 'rgba(255, 170, 40, 0.45)';
+      this.ctx.shadowBlur    = 8;
+      this.ctx.shadowOffsetX = 0;
+      this.ctx.shadowOffsetY = 0;
+    } else {
+      this.ctx.strokeStyle   = '#ffffff';
+      this.ctx.shadowColor   = 'rgba(0,0,0,0.2)';
+      this.ctx.shadowBlur    = 15;
+      this.ctx.shadowOffsetX = 0;
+      this.ctx.shadowOffsetY = 5;
+    }
+    this.ctx.strokeRect(half, half, w, h);
   }
 
-  _drawGreenBlock(frame, isDragging) {
-    this.ctx.fillStyle     = isDragging ? '#66bb6a' : '#43a047';
-    this.ctx.shadowColor   = 'rgba(0,0,0,0.3)';
-    this.ctx.shadowBlur    = 15;
-    this.ctx.shadowOffsetY = 5;
+  _drawGreenBlock(frame, isDragging, isDarkMode) {
+    this.ctx.fillStyle = isDragging ? '#66bb6a' : '#43a047';
+    if (isDarkMode) {
+      this.ctx.shadowColor   = 'rgba(255, 170, 40, 0.35)';
+      this.ctx.shadowBlur    = 8;
+      this.ctx.shadowOffsetX = 0;
+      this.ctx.shadowOffsetY = 0;
+    } else {
+      this.ctx.shadowColor   = 'rgba(0,0,0,0.3)';
+      this.ctx.shadowBlur    = 15;
+      this.ctx.shadowOffsetX = 0;
+      this.ctx.shadowOffsetY = 5;
+    }
     this.ctx.fillRect(0, 0, frame.width, frame.height);
   }
 
