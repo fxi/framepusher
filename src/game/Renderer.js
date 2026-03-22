@@ -185,12 +185,12 @@ export class Renderer {
 
     if (isDarkMode) {
       this.ctx.strokeStyle   = '#111111';
-      this.ctx.shadowColor   = 'rgba(255, 170, 40, 0.45)';
+      this.ctx.shadowColor   = 'rgba(200,200,200,0.8)';
       this.ctx.shadowBlur    = 8;
       this.ctx.shadowOffsetX = 0;
       this.ctx.shadowOffsetY = 0;
     } else {
-      this.ctx.strokeStyle   = '#ffffff';
+      this.ctx.strokeStyle   = '#fcfcfa';
       this.ctx.shadowColor   = 'rgba(0,0,0,0.2)';
       this.ctx.shadowBlur    = 15;
       this.ctx.shadowOffsetX = 0;
@@ -202,7 +202,7 @@ export class Renderer {
   _drawGreenBlock(frame, isDragging, isDarkMode) {
     this.ctx.fillStyle = isDragging ? '#66bb6a' : '#43a047';
     if (isDarkMode) {
-      this.ctx.shadowColor   = 'rgba(255, 170, 40, 0.35)';
+      this.ctx.shadowColor   = 'rgba(200,200,200,0.8)';
       this.ctx.shadowBlur    = 8;
       this.ctx.shadowOffsetX = 0;
       this.ctx.shadowOffsetY = 0;
