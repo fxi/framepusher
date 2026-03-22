@@ -19,6 +19,9 @@ export class EventHandler {
     this.onDragEnd = null;
     this.onDragMove = null;
 
+    this._dragVelocity = { x: 0, y: 0 };
+    this._lastDragPos  = null;
+
     this._bindEvents();
   }
 
@@ -209,9 +212,16 @@ export class EventHandler {
     this.dragInfo.offsetX = position.x - frame.x;
     this.dragInfo.offsetY = position.y - frame.y;
 
+    this._dragVelocity = { x: 0, y: 0 };
+    this._lastDragPos  = null;
+
     this.canvas.style.cursor = 'grabbing';
 
     if (this.onDragStart) this.onDragStart(foundIndex);
+  }
+
+  getDragVelocity() {
+    return { ...this._dragVelocity };
   }
 
   _handleDragMove(position) {
@@ -239,6 +249,15 @@ export class EventHandler {
       this.frames[i].x += dx;
       this.frames[i].y += dy;
     }
+
+    // Track cursor velocity (EMA) for inertia on release
+    if (this._lastDragPos) {
+      const dvx = position.x - this._lastDragPos.x;
+      const dvy = position.y - this._lastDragPos.y;
+      this._dragVelocity.x = dvx * 0.4 + this._dragVelocity.x * 0.6;
+      this._dragVelocity.y = dvy * 0.4 + this._dragVelocity.y * 0.6;
+    }
+    this._lastDragPos = { x: position.x, y: position.y };
 
     if (this.onDragMove) this.onDragMove(position);
   }

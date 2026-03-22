@@ -30,8 +30,14 @@ export class FramePusher {
     this._cursorFrames = 0;
     this._bounceFrames = 0;
 
-    // Reset state
-    this._isResetting = false;
+    // Sequential reset state
+    this._resetSeqActive = false;
+    this._resetSeqStep   = 0;
+    this._resetSeqLocked = new Set();
+
+    // Coasting state (billiard inertia after release)
+    this._isCoasting    = false;
+    this._lastDragIndex = -1;
 
     // Dark mode state
     this.isDarkMode = false;
@@ -111,11 +117,37 @@ export class FramePusher {
       (dragIndex) => {
         this.physics.stopAllMovement(this.frames);
         this._activeContacts.clear();
+        this._isCoasting     = false;
+        this._resetSeqActive = false; // user takes over — cancel sequence
+        this._resetSeqLocked.clear();
+        this._lastDragIndex  = dragIndex;
         this.audio.playGrab(dragIndex, this.frames.length);
       },
       null,
       () => {
         this._activeContacts.clear();
+
+        // Zero outer-frame velocities accumulated by push mechanics during drag
+        // (they would otherwise fire independently and cause chaos)
+        for (let i = 0; i < this._lastDragIndex; i++) {
+          this.frames[i].vx = 0;
+          this.frames[i].vy = 0;
+        }
+
+        // Inject cursor velocity into released frame + inner frames
+        const vel   = this.eventHandler.getDragVelocity();
+        const speed = Math.hypot(vel.x, vel.y);
+        if (speed > 0.5) {
+          const MAX_VEL = 10; // px/frame — controlled, not chaotic
+          const scale   = Math.min(1, MAX_VEL / speed);
+          const vx = vel.x * scale;
+          const vy = vel.y * scale;
+          for (let i = this._lastDragIndex; i < this.frames.length; i++) {
+            this.frames[i].vx = vx;
+            this.frames[i].vy = vy;
+          }
+          this._isCoasting = true;
+        }
       }
     );
 
@@ -146,8 +178,10 @@ export class FramePusher {
         resetBtn.addEventListener('animationend', () => {
           resetBtn.classList.remove('spinning');
         }, { once: true });
-        this._isResetting = true;
-        this.audio.playReset();
+        this._isCoasting     = false;
+        this._resetSeqActive = true;
+        this._resetSeqStep   = 0;
+        this._resetSeqLocked = new Set();
       });
     }
 
@@ -187,20 +221,106 @@ export class FramePusher {
         else        this._activeContacts.set(i, n - 1);
       }
 
-    } else if (this._isResetting) {
-      this.physics.updateSettlingPhysics(this.frames);
+    } else if (this._resetSeqActive) {
+      const step  = this._resetSeqStep;
+      // Speed increases with each step: outer frames slow, inner frames fast
+      const SPEED = Math.min(8 + step * 3, 30);
+      const T     = this.config.FRAME_THICKNESS;
 
-      const maxV = Math.max(...this.frames.map(f => Math.hypot(f.vx, f.vy)));
+      // 1. Pin already-placed frames
+      for (const idx of this._resetSeqLocked) {
+        const f = this.frames[idx];
+        f.x = f.restX; f.y = f.restY; f.vx = 0; f.vy = 0;
+      }
+
+      // 2. Let non-current inner frames coast from previous pushes
+      for (let j = step + 1; j < this.frames.length; j++) {
+        if (this._resetSeqLocked.has(j)) continue;
+        this.frames[j].x += this.frames[j].vx;
+        this.frames[j].y += this.frames[j].vy;
+        this.frames[j].vx *= this.config.DAMPING;
+        this.frames[j].vy *= this.config.DAMPING;
+      }
+
+      // 3. Move current frame linearly toward rest
+      if (step < this.frames.length) {
+        const frame = this.frames[step];
+        const dx    = frame.restX - frame.x;
+        const dy    = frame.restY - frame.y;
+        const dist  = Math.hypot(dx, dy);
+
+        if (dist <= SPEED) {
+          frame.x = frame.restX; frame.y = frame.restY; frame.vx = 0; frame.vy = 0;
+          this.audio.playCollision(step, this.frames.length, SPEED);
+          this._bounceFrames = 15;
+          this._resetSeqLocked.add(step);
+          this._resetSeqStep++;
+          if (this._resetSeqStep >= this.frames.length) this._resetSeqActive = false;
+        } else {
+          frame.x += (dx / dist) * SPEED;
+          frame.y += (dy / dist) * SPEED;
+          frame.vx = (dx / dist) * SPEED;
+          frame.vy = (dy / dist) * SPEED;
+        }
+      }
+
+      // 4. Outer-pushes-inner: each frame constrains the one inside it.
+      //    Iterating j in order cascades the push in one tick:
+      //    step pushes step+1 → step+1 (updated) pushes step+2, etc.
+      for (let j = step + 1; j < this.frames.length; j++) {
+        if (this._resetSeqLocked.has(j)) continue;
+        const outer = this.frames[j - 1];
+        const inner = this.frames[j];
+
+        const minX = outer.x + T;
+        const maxX = outer.x + outer.width  - T - inner.width;
+        const minY = outer.y + T;
+        const maxY = outer.y + outer.height - T - inner.height;
+        let hit = false;
+
+        if (inner.x < minX) { inner.vx += (minX - inner.x) * 0.5; inner.x = minX; hit = true; }
+        if (inner.x > maxX) { inner.vx -= (inner.x - maxX) * 0.5; inner.x = maxX; hit = true; }
+        if (inner.y < minY) { inner.vy += (minY - inner.y) * 0.5; inner.y = minY; hit = true; }
+        if (inner.y > maxY) { inner.vy -= (inner.y - maxY) * 0.5; inner.y = maxY; hit = true; }
+
+        if (hit) {
+          this.audio.playCollision(j, this.frames.length, Math.hypot(inner.vx, inner.vy));
+          this._bounceFrames = 20;
+        }
+      }
+
+    } else if (this._isCoasting) {
+      // Integrate velocities for all frames
+      for (const frame of this.frames) {
+        frame.x  += frame.vx;
+        frame.y  += frame.vy;
+        frame.vx *= this.config.DAMPING;
+        frame.vy *= this.config.DAMPING;
+      }
+
+      // Collision: sliding inner group pushes outer frames — chain reaction
+      this.physics.updateDragPhysics(this.frames, this._lastDragIndex);
+
+      // Audio on chain collision
+      const contacted = new Set(this.physics.pushedContacts.map(c => parseInt(c)));
+      const newFrames = [...contacted].filter(i => !this._activeContacts.has(i));
+      if (newFrames.length > 0) {
+        const outermost = Math.min(...newFrames);
+        const vel = Math.hypot(this.frames[outermost].vx, this.frames[outermost].vy);
+        this.audio.playCollision(outermost, this.frames.length, vel);
+      }
+      for (const i of contacted) this._activeContacts.set(i, 8);
+      for (const [i, n] of this._activeContacts) {
+        if (n <= 1) this._activeContacts.delete(i);
+        else        this._activeContacts.set(i, n - 1);
+      }
+
+      let maxV = 0;
+      for (const frame of this.frames) maxV = Math.max(maxV, Math.hypot(frame.vx, frame.vy));
       if (maxV > 3) this._bounceFrames = 50;
-
-      const settled = this.frames.every(
-        f => Math.hypot(f.vx, f.vy) < 0.1 &&
-             Math.hypot(f.x - f.restX, f.y - f.restY) < 0.5
-      );
-      if (settled) {
-        for (const f of this.frames) { f.x = f.restX; f.y = f.restY; f.vx = 0; f.vy = 0; }
-        this._isResetting = false;
-        this.audio.playSettle();
+      if (maxV < 0.5) {
+        for (const f of this.frames) { f.vx = 0; f.vy = 0; }
+        this._isCoasting = false;
       }
     }
   }
